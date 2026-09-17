@@ -1,122 +1,387 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useEffect, useRef, useState } from "react";
+import "./App.css";
+
+const API_BASE = "http://127.0.0.1:8000";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [sources, setSources] = useState([]);
+  const [documents, setDocuments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const fileInputRef = useRef(null);
+
+  const fetchDocuments = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/documents`);
+
+      if (!response.ok) {
+        throw new Error("Failed to load documents.");
+      }
+
+      const data = await response.json();
+      setDocuments(data.documents || []);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  useEffect(() => {
+    fetchDocuments();
+  }, []);
+
+  const askQuestion = async () => {
+    if (!question.trim() || loading) return;
+
+    setLoading(true);
+    setError("");
+    setAnswer("");
+    setSources([]);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          question: question.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Failed to generate answer.");
+      }
+
+      setAnswer(data.answer || "");
+      setSources(data.sources || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleQuestionKeyDown = (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      askQuestion();
+    }
+  };
+
+  const uploadDocument = async (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      setError("Only PDF files are supported.");
+      event.target.value = "";
+      return;
+    }
+
+    setUploading(true);
+    setError("");
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/documents/upload`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail || "Document upload failed."
+        );
+      }
+
+      await fetchDocuments();
+
+      setAnswer("");
+      setSources([]);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+      event.target.value = "";
+    }
+  };
+
+  const deleteDocument = async (documentId) => {
+    setError("");
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/documents/${documentId}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.detail || "Failed to delete document."
+        );
+      }
+
+      await fetchDocuments();
+
+      setAnswer("");
+      setSources([]);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="app">
+      <header className="topbar">
+        <div className="brand">
+          <div className="brand-mark">✦</div>
+
+          <div>
+            <h1>LunorAI</h1>
+            <span>Mini AI Knowledge Assistant</span>
+          </div>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
+
+        <div className="status">
+          <span className="status-dot"></span>
+          Knowledge Base
+        </div>
+      </header>
+
+      <main className="main-content">
+        <section className="hero">
+          <p className="eyebrow">YOUR KNOWLEDGE, SEARCHABLE</p>
+
+          <h2>
+            Ask your documents.
+            <br />
+            <span>Get grounded answers.</span>
+          </h2>
+
+          <p className="hero-description">
+            Upload your PDFs and ask questions using a retrieval-
+            augmented AI assistant.
           </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+        </section>
 
-      <div className="ticks"></div>
+        <section className="ask-card">
+          <div className="question-label">
+            Ask LunorAI
+          </div>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+          <textarea
+            value={question}
+            onChange={(event) =>
+              setQuestion(event.target.value)
+            }
+            onKeyDown={handleQuestionKeyDown}
+            placeholder="What would you like to know?"
+            rows={4}
+          />
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+          <div className="ask-footer">
+            <span>Press Enter to ask</span>
+
+            <button
+              className="primary-button"
+              onClick={askQuestion}
+              disabled={!question.trim() || loading}
+            >
+              {loading ? (
+                <>
+                  <span className="spinner"></span>
+                  Thinking...
+                </>
+              ) : (
+                <>
+                  Ask LunorAI
+                  <span>→</span>
+                </>
+              )}
+            </button>
+          </div>
+        </section>
+
+        {error && (
+          <div className="error-message">
+            <span>!</span>
+            {error}
+          </div>
+        )}
+
+        {answer && (
+          <section className="answer-section">
+            <div className="section-heading">
+              <div>
+                <p className="section-eyebrow">RESPONSE</p>
+                <h3>Answer</h3>
+              </div>
+            </div>
+
+            <div className="answer-card">
+              <div className="answer-icon">✦</div>
+
+              <div className="answer-text">
+                {answer}
+              </div>
+            </div>
+
+            {sources.length > 0 && (
+              <div className="sources-section">
+                <div className="sources-heading">
+                  <h3>Sources</h3>
+                  <span>{sources.length} retrieved</span>
+                </div>
+
+                <div className="sources-grid">
+                  {sources.map((source, index) => (
+                    <div
+                      className="source-card"
+                      key={`${source.document}-${source.page}-${index}`}
+                    >
+                      <div className="source-top">
+                        <div className="pdf-icon">
+                          PDF
+                        </div>
+
+                        <span className="source-number">
+                          0{index + 1}
+                        </span>
+                      </div>
+
+                      <h4>{source.document}</h4>
+
+                      <div className="source-meta">
+                        <span>
+                          Page {source.page}
+                        </span>
+
+                        <span>
+                          Score{" "}
+                          {Number(source.score).toFixed(3)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        <section className="knowledge-section">
+          <div className="section-heading knowledge-heading">
+            <div>
+              <p className="section-eyebrow">
+                DOCUMENTS
+              </p>
+
+              <h3>Knowledge Base</h3>
+            </div>
+
+            <span className="document-count">
+              {documents.length}{" "}
+              {documents.length === 1
+                ? "document"
+                : "documents"}
+            </span>
+          </div>
+
+          <div
+            className="upload-zone"
+            onClick={() =>
+              fileInputRef.current?.click()
+            }
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              onChange={uploadDocument}
+              hidden
+            />
+
+            <div className="upload-icon">
+              ↑
+            </div>
+
+            <div>
+              <strong>
+                {uploading
+                  ? "Processing document..."
+                  : "Upload a PDF"}
+              </strong>
+
+              <p>
+                {uploading
+                  ? "Extracting text and building embeddings"
+                  : "Drop a PDF here or click to browse"}
+              </p>
+            </div>
+          </div>
+
+          {documents.length > 0 && (
+            <div className="document-list">
+              {documents.map((document) => (
+                <div
+                  className="document-row"
+                  key={document.id}
+                >
+                  <div className="document-info">
+                    <div className="document-icon">
+                      PDF
+                    </div>
+
+                    <div>
+                      <strong>
+                        {document.filename}
+                      </strong>
+
+                      <span>
+                        Indexed in knowledge base
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    className="delete-button"
+                    onClick={() =>
+                      deleteDocument(document.id)
+                    }
+                    title="Delete document"
+                  >
+                    🗑
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </main>
+
+      <footer>
+        <span>LunorAI</span>
+        <span>Local RAG · FAISS · NVIDIA AI</span>
+      </footer>
+    </div>
+  );
 }
 
-export default App
+export default App;
