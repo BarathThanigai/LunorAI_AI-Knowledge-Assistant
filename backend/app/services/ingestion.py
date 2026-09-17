@@ -21,6 +21,7 @@ class IngestionService:
     def ingest_pdf(
         self,
         pdf_path: str | Path,
+        source_name: str | None = None,
     ) -> dict[str, Any]:
         """Process a PDF and add its chunks to the vector store."""
 
@@ -48,10 +49,21 @@ class IngestionService:
                 "No text could be extracted from the PDF."
             )
 
+        # Store the human-readable/original filename in metadata
+        # instead of the UUID-prefixed physical filename.
+        metadata_source = (
+            source_name
+            if source_name
+            else path.name
+        )
+
+        for chunk in chunks:
+            chunk["source"] = metadata_source
+
         self.vector_store.add_chunks(chunks)
 
         return {
-            "source": path.name,
+            "source": metadata_source,
             "chunks_added": len(chunks),
             "total_chunks": self.vector_store.count,
         }
@@ -59,10 +71,16 @@ class IngestionService:
 
 def ingest_pdf(
     pdf_path: str | Path,
+    source_name: str | None = None,
 ) -> dict[str, Any]:
     """Convenience function for ingesting a PDF."""
+
     service = IngestionService()
-    return service.ingest_pdf(pdf_path)
+
+    return service.ingest_pdf(
+        pdf_path=pdf_path,
+        source_name=source_name,
+    )
 
 
 __all__ = [

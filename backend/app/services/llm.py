@@ -63,11 +63,11 @@ in the retrieved knowledge-base context.
 
 Rules:
 1. Do not use outside knowledge.
-2. Do not invent or infer facts that are not supported by the context.
+2. Do not invent facts that are not supported by the context.
 3. If the answer cannot be found in the context, say:
    "I couldn't find that information in the knowledge base."
 4. Keep the answer concise and directly answer the question.
-5. When useful, mention the relevant document or page.
+5. Return only the final answer.
 """
 
     user_prompt = f"""Retrieved knowledge-base context:
@@ -77,7 +77,7 @@ Rules:
 User question:
 {question}
 
-Answer using only the retrieved context.
+Return only the final answer.
 """
 
     client = get_client()
@@ -96,6 +96,11 @@ Answer using only the retrieved context.
         ],
         temperature=0.2,
         max_tokens=512,
+        extra_body={
+            "chat_template_kwargs": {
+                "enable_thinking": False,
+            },
+        },
     )
 
     answer = response.choices[0].message.content
