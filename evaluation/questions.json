@@ -1,0 +1,52 @@
+[
+  {
+    "id": "q01",
+    "question": "What projects has Barath worked on?",
+    "type": "answerable"
+  },
+  {
+    "id": "q02",
+    "question": "What technologies were used in the WebScope project?",
+    "type": "answerable"
+  },
+  {
+    "id": "q03",
+    "question": "What is the purpose of the FastAPI Task Manager?",
+    "type": "answerable"
+  },
+  {
+    "id": "q04",
+    "question": "What databases has Barath worked with?",
+    "type": "answerable"
+  },
+  {
+    "id": "q05",
+    "question": "What programming languages does Barath know?",
+    "type": "answerable"
+  },
+  {
+    "id": "q06",
+    "question": "What was the Unified Project Management System designed to do?",
+    "type": "answerable"
+  },
+  {
+    "id": "q07",
+    "question": "What technologies were used to build the GitHub Developer Portfolio Analytics System?",
+    "type": "answerable"
+  },
+  {
+    "id": "q08",
+    "question": "What is Barath's favorite programming language?",
+    "type": "unanswerable"
+  },
+  {
+    "id": "q09",
+    "question": "What is the capital of France?",
+    "type": "unanswerable"
+  },
+  {
+    "id": "q10",
+    "question": "What is the weather today?",
+    "type": "unanswerable"
+  }
+]
