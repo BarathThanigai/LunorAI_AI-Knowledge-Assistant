@@ -50,17 +50,31 @@ async def upload_document(
             detail="Only PDF files are supported.",
         )
 
-    document_id = uuid4().hex
-
     original_filename = Path(
         file.filename
     ).name
+
+    # Remove any previously uploaded copy
+    # of the same filename.
+    existing_files = list(
+        DOCUMENTS_DIR.glob(
+            f"*_{original_filename}"
+        )
+    )
+
+    for existing_file in existing_files:
+        existing_file.unlink()
+
+    document_id = uuid4().hex
 
     stored_filename = (
         f"{document_id}_{original_filename}"
     )
 
-    file_path = DOCUMENTS_DIR / stored_filename
+    file_path = (
+        DOCUMENTS_DIR
+        / stored_filename
+    )
 
     try:
         # Save the uploaded PDF.
@@ -84,21 +98,30 @@ async def upload_document(
         return {
             "id": document_id,
             "filename": original_filename,
-            "chunks_added": result["chunks_added"],
-            "total_chunks": result["total_chunks"],
+            "chunks_added": result[
+                "chunks_added"
+            ],
+            "total_chunks": result[
+                "total_chunks"
+            ],
             "message": (
-                "Document uploaded and indexed successfully."
+                "Document uploaded and indexed "
+                "successfully."
             ),
         }
 
     except Exception as exc:
-        # Remove the physical file if ingestion fails.
+        # Remove the physical file if
+        # ingestion fails.
         if file_path.exists():
             file_path.unlink()
 
         raise HTTPException(
             status_code=500,
-            detail=f"Document ingestion failed: {exc}",
+            detail=(
+                "Document ingestion failed: "
+                f"{exc}"
+            ),
         ) from exc
 
     finally:
@@ -120,7 +143,8 @@ def list_documents() -> dict:
         #
         # UUID_original_filename.pdf
         #
-        # Extract the original filename for the API response.
+        # Extract the original filename
+        # for the API response.
         if "_" in filename:
             document_id, original_filename = (
                 filename.split("_", 1)
@@ -173,7 +197,8 @@ def delete_document(
     try:
         vector_store = VectorStore()
 
-        # FAISS metadata uses the original filename.
+        # FAISS metadata uses the
+        # original filename.
         vector_store.delete_document(
             original_filename,
         )
@@ -182,12 +207,17 @@ def delete_document(
         file_path.unlink()
 
         return {
-            "message": "Document deleted successfully.",
+            "message": (
+                "Document deleted successfully."
+            ),
             "filename": original_filename,
         }
 
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"Document deletion failed: {exc}",
+            detail=(
+                "Document deletion failed: "
+                f"{exc}"
+            ),
         ) from exc
