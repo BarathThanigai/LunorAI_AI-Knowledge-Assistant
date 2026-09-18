@@ -1,0 +1,96 @@
+{
+  "total": 10,
+  "passed": 9,
+  "results": [
+    {
+      "id": "q01",
+      "question": "What projects has Barath worked on?",
+      "type": "answerable",
+      "passed": true,
+      "answer": "Based on the context, Barath has worked on the following projects:\n\n1. **Unified Project Management System** - Co-inventor of a published Indian patent for a platform designed to streamline team formation, guide allocation, project submissions, and evaluation workflows through a centralized system, including a randomized panel-assignment algorithm.\n\n2. **GitHub Developer Portfolio Analytics System** - A full-stack platform built with React, Express.js, and MySQL that provides a normalized database with REST APIs and CRUD operations, plus an AI-powered natural language interface using Ollama for intelligent portfolio querying.\n\n3. **Concurrent Web Crawler** - An engineered tool for SEO auditing and performance analysis using Python's asyncio, capable of analyzing up to 200 webpages per audit, with automated pipeline for SEO metrics, broken-link detection, and CSV report generation.\n\n4. **Business Intelligence and Power BI Analytics Dashboard Suite** - A dashboard suite built with Power BI, Power Query, Python, DAX, and Excel.\n\n5. **AI Backend Benchmarking Framework** - An automated framework for AI backend benchmarking and standardized claim evaluation.\n\nFinal answer is: Barath has worked on a Unified Project Management System (co-inventor of a published Indian patent), a GitHub Developer Portfolio Analytics System, a Concurrent Web Crawler for SEO auditing, a Business Intelligence and Power BI Analytics Dashboard Suite, and an AI backend benchmarking framework.",
+      "source_count": 5,
+      "reason": "Answer returned with retrieved sources."
+    },
+    {
+      "id": "q02",
+      "question": "What technologies were used in the WebScope project?",
+      "type": "answerable",
+      "passed": true,
+      "answer": "I couldn't find that information in the knowledge base.",
+      "source_count": 5,
+      "reason": "Answer returned with retrieved sources."
+    },
+    {
+      "id": "q03",
+      "question": "What is the purpose of the FastAPI Task Manager?",
+      "type": "answerable",
+      "passed": true,
+      "answer": "I couldn't find that information in the knowledge base.",
+      "source_count": 5,
+      "reason": "Answer returned with retrieved sources."
+    },
+    {
+      "id": "q04",
+      "question": "What databases has Barath worked with?",
+      "type": "answerable",
+      "passed": true,
+      "answer": "Databases: PostgreSQL, MySQL, Oracle Database, MongoDB",
+      "source_count": 5,
+      "reason": "Answer returned with retrieved sources."
+    },
+    {
+      "id": "q05",
+      "question": "What programming languages does Barath know?",
+      "type": "answerable",
+      "passed": true,
+      "answer": "Python, Java, C++, JavaScript, C",
+      "source_count": 5,
+      "reason": "Answer returned with retrieved sources."
+    },
+    {
+      "id": "q06",
+      "question": "What was the Unified Project Management System designed to do?",
+      "type": "answerable",
+      "passed": true,
+      "answer": "The Unified Project Management System was designed to streamline team formation, guide allocation, project submissions, and evaluation workflows through a centralized system.",
+      "source_count": 5,
+      "reason": "Answer returned with retrieved sources."
+    },
+    {
+      "id": "q07",
+      "question": "What technologies were used to build the GitHub Developer Portfolio Analytics System?",
+      "type": "answerable",
+      "passed": true,
+      "answer": "React, Express.js, MySQL, Ollama",
+      "source_count": 5,
+      "reason": "Answer returned with retrieved sources."
+    },
+    {
+      "id": "q08",
+      "question": "What is Barath's favorite programming language?",
+      "type": "unanswerable",
+      "passed": false,
+      "answer": "Iellsells",
+      "source_count": 5,
+      "reason": "Model returned unsupported information."
+    },
+    {
+      "id": "q09",
+      "question": "What is the capital of France?",
+      "type": "unanswerable",
+      "passed": true,
+      "answer": "I couldn't find that information in the knowledge base.",
+      "source_count": 5,
+      "reason": "Correctly rejected unsupported information."
+    },
+    {
+      "id": "q10",
+      "question": "What is the weather today?",
+      "type": "unanswerable",
+      "passed": true,
+      "answer": "I couldn't find that information in the knowledge base.",
+      "source_count": 5,
+      "reason": "Correctly rejected unsupported information."
+    }
+  ]
+}

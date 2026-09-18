@@ -32,7 +32,7 @@ def chat(
     try:
         result = answer_question(
             question=request.question,
-            top_k=5,
+            top_k=7,
         )
 
         return result

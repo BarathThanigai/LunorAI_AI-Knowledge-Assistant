@@ -7,3 +7,4 @@ faiss-cpu
 openai
 python-dotenv
 numpy
+requests
