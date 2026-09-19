@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
 
-const API_BASE = "http://127.0.0.1:8000";
+const API_URL = import.meta.env.VITE_API_URL;
 
 const SUPPORTED_EXTENSIONS = [".pdf", ".docx", ".txt", ".md"];
 
@@ -35,7 +35,7 @@ function App() {
 
   const fetchDocuments = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/documents`);
+      const response = await fetch(`${API_URL}/api/documents`);
 
       if (!response.ok) {
         throw new Error("Failed to load documents.");
@@ -61,7 +61,7 @@ function App() {
     setSources([]);
 
     try {
-      const response = await fetch(`${API_BASE}/api/chat`, {
+      const response = await fetch(`${API_URL}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -120,7 +120,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `${API_BASE}/api/documents/upload`,
+        `${API_URL}/api/documents/upload`,
         {
           method: "POST",
           body: formData,
@@ -149,7 +149,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `${API_BASE}/api/documents/${documentId}`,
+        `${API_URL}/api/documents/${documentId}`,
         {
           method: "DELETE",
         }
