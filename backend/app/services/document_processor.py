@@ -1,4 +1,4 @@
-"""PDF extraction and boundary-aware chunking for LunorAI."""
+"""Document extraction and chunking for the LunorAI RAG pipeline."""
 
 from __future__ import annotations
 
@@ -7,256 +7,301 @@ from pathlib import Path
 from typing import Any
 
 import pymupdf
+from docx import Document
 
 
-DEFAULT_CHUNK_SIZE = 800
+DEFAULT_CHUNK_SIZE = 1000
 DEFAULT_CHUNK_OVERLAP = 150
 
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 
-def _clean_text(text: str) -> str:
+
+def _normalize_text(text: str) -> str:
     """Normalize whitespace while preserving paragraph boundaries."""
     text = text.replace("\r\n", "\n").replace("\r", "\n")
 
-    # Remove excessive spaces/tabs.
+    # Normalize spaces/tabs inside lines.
     text = re.sub(r"[ \t]+", " ", text)
 
-    # Normalize excessive blank lines.
-    text = re.sub(r"\n[ \t]*\n[ \t]*\n+", "\n\n", text)
-
-    # Remove spaces immediately before/after line breaks.
-    text = re.sub(r" *\n *", "\n", text)
+    # Remove excessive blank lines.
+    text = re.sub(r"\n{3,}", "\n\n", text)
 
     return text.strip()
 
 
-def _split_into_units(text: str) -> list[str]:
-    """Split text into paragraphs, then sentences when necessary."""
-    paragraphs = [
-        paragraph.strip()
-        for paragraph in re.split(r"\n\s*\n", text)
-        if paragraph.strip()
-    ]
+def _split_long_text(text: str, max_length: int) -> list[str]:
+    """Split long text into sentence/whitespace-aware pieces."""
+    if len(text) <= max_length:
+        return [text]
 
-    units: list[str] = []
+    sentences = re.split(r"(?<=[.!?])\s+", text)
 
-    for paragraph in paragraphs:
-        if len(paragraph) <= DEFAULT_CHUNK_SIZE:
-            units.append(paragraph)
+    pieces: list[str] = []
+    current = ""
+
+    for sentence in sentences:
+        sentence = sentence.strip()
+
+        if not sentence:
             continue
 
-        # Split long paragraphs into sentence-like units.
-        sentences = re.split(
-            r"(?<=[.!?])\s+",
-            paragraph,
-        )
+        if len(sentence) > max_length:
+            words = sentence.split()
 
-        for sentence in sentences:
-            sentence = sentence.strip()
+            current_words: list[str] = []
 
-            if sentence:
-                units.append(sentence)
+            for word in words:
+                candidate = " ".join(current_words + [word])
 
-    return units
+                if len(candidate) <= max_length:
+                    current_words.append(word)
+                else:
+                    if current_words:
+                        pieces.append(" ".join(current_words))
+
+                    current_words = [word]
+
+            if current_words:
+                pieces.append(" ".join(current_words))
+
+            current = ""
+            continue
+
+        candidate = f"{current} {sentence}".strip()
+
+        if len(candidate) <= max_length:
+            current = candidate
+        else:
+            if current:
+                pieces.append(current)
+
+            current = sentence
+
+    if current:
+        pieces.append(current)
+
+    return pieces
 
 
-def _chunk_text(
+def chunk_text(
     text: str,
+    *,
+    source: str,
+    page: int | None = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
-) -> list[str]:
-    """Create meaningful overlapping chunks from extracted text."""
+) -> list[dict[str, Any]]:
+    """Convert extracted text into overlapping, boundary-aware chunks."""
 
-    if not text.strip():
+    if not isinstance(text, str) or not text.strip():
         return []
 
     if chunk_size <= 0:
         raise ValueError("chunk_size must be greater than zero.")
 
-    if chunk_overlap < 0:
-        raise ValueError("chunk_overlap cannot be negative.")
-
-    if chunk_overlap >= chunk_size:
+    if chunk_overlap < 0 or chunk_overlap >= chunk_size:
         raise ValueError(
-            "chunk_overlap must be smaller than chunk_size."
+            "chunk_overlap must be greater than or equal to zero "
+            "and smaller than chunk_size."
         )
 
-    units = _split_into_units(text)
+    normalized = _normalize_text(text)
 
-    chunks: list[str] = []
-    current_units: list[str] = []
-    current_length = 0
+    paragraphs = re.split(r"\n\s*\n", normalized)
 
-    for unit in units:
-        unit_length = len(unit)
+    units: list[str] = []
 
-        # Handle a single unit larger than the target size.
-        if unit_length > chunk_size:
-            if current_units:
-                chunks.append("\n\n".join(current_units))
-                current_units = []
-                current_length = 0
+    for paragraph in paragraphs:
+        paragraph = paragraph.strip()
 
-            start = 0
-
-            while start < len(unit):
-                end = min(
-                    start + chunk_size,
-                    len(unit),
-                )
-
-                piece = unit[start:end].strip()
-
-                if piece:
-                    chunks.append(piece)
-
-                if end >= len(unit):
-                    break
-
-                start = end - chunk_overlap
-
+        if not paragraph:
             continue
 
-        # Add unit to current chunk if it fits.
-        separator_length = 2 if current_units else 0
+        units.extend(_split_long_text(paragraph, chunk_size))
 
-        if (
-            current_units
-            and current_length + separator_length + unit_length
-            > chunk_size
-        ):
+    chunks: list[dict[str, Any]] = []
+    current = ""
+
+    for unit in units:
+        unit = unit.strip()
+
+        if not unit:
+            continue
+
+        candidate = f"{current}\n\n{unit}".strip()
+
+        if current and len(candidate) > chunk_size:
             chunks.append(
-                "\n\n".join(current_units)
+                {
+                    "text": current,
+                    "source": source,
+                    "page": page,
+                    "chunk_id": "",
+                }
             )
 
-            # Build overlap from complete previous units rather than
-            # cutting arbitrary characters from the middle of words.
-            overlap_units: list[str] = []
-            overlap_length = 0
+            overlap_text = current[-chunk_overlap:].strip()
+            current = f"{overlap_text}\n\n{unit}".strip()
+        else:
+            current = candidate
 
-            for previous in reversed(current_units):
-                extra = len(previous) + (
-                    2 if overlap_units else 0
-                )
-
-                if overlap_length + extra > chunk_overlap:
-                    break
-
-                overlap_units.insert(
-                    0,
-                    previous,
-                )
-
-                overlap_length += extra
-
-            current_units = overlap_units
-            current_length = sum(
-                len(item)
-                for item in current_units
-            ) + max(
-                0,
-                (len(current_units) - 1) * 2,
-            )
-
-        current_units.append(unit)
-
-        current_length = sum(
-            len(item)
-            for item in current_units
-        ) + max(
-            0,
-            (len(current_units) - 1) * 2,
-        )
-
-    if current_units:
+    if current:
         chunks.append(
-            "\n\n".join(current_units)
+            {
+                "text": current,
+                "source": source,
+                "page": page,
+                "chunk_id": "",
+            }
         )
+
+    for index, chunk in enumerate(chunks, start=1):
+        page_part = f"_{page}" if page is not None else ""
+        chunk["chunk_id"] = f"{Path(source).stem}{page_part}_{index}"
 
     return chunks
 
 
-def process_pdf(
-    pdf_path: str | Path,
-    chunk_size: int = DEFAULT_CHUNK_SIZE,
-    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
-) -> list[dict[str, Any]]:
-    """Extract text from a PDF and return metadata-rich chunks."""
+def process_pdf(path: str | Path) -> list[dict[str, Any]]:
+    """Extract text from a PDF page-by-page and create chunks."""
 
-    path = Path(pdf_path)
+    path = Path(path)
 
     if not path.exists():
-        raise FileNotFoundError(
-            f"PDF file not found: {path}"
-        )
-
-    if not path.is_file():
-        raise ValueError(
-            f"Path is not a file: {path}"
-        )
-
-    if path.suffix.lower() != ".pdf":
-        raise ValueError(
-            "Only PDF files are supported."
-        )
+        raise FileNotFoundError(f"File not found: {path}")
 
     chunks: list[dict[str, Any]] = []
 
     with pymupdf.open(path) as document:
-        for page_number, page in enumerate(
-            document,
-            start=1,
-        ):
-            raw_text = page.get_text("text")
+        for page_number, page in enumerate(document, start=1):
+            text = page.get_text("text")
 
-            cleaned_text = _clean_text(
-                raw_text
+            page_chunks = chunk_text(
+                text,
+                source=path.name,
+                page=page_number,
             )
 
-            if not cleaned_text:
-                continue
-
-            page_chunks = _chunk_text(
-                cleaned_text,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-            )
-
-            for chunk_number, chunk_text in enumerate(
-                page_chunks,
-                start=1,
-            ):
-                chunks.append(
-                    {
-                        "text": chunk_text,
-                        "source": path.name,
-                        "page": page_number,
-                        "chunk_id": (
-                            f"{path.stem}_"
-                            f"{page_number}_"
-                            f"{chunk_number}"
-                        ),
-                    }
-                )
+            chunks.extend(page_chunks)
 
     return chunks
 
 
-def process_document(
-    pdf_path: str | Path,
-) -> list[dict[str, Any]]:
-    """Alias for process_pdf."""
-    return process_pdf(pdf_path)
+def process_docx(path: str | Path) -> list[dict[str, Any]]:
+    """Extract paragraphs from a Word document and create chunks."""
+
+    path = Path(path)
+
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
+
+    document = Document(path)
+
+    paragraphs: list[str] = []
+
+    for paragraph in document.paragraphs:
+        text = paragraph.text.strip()
+
+        if text:
+            paragraphs.append(text)
+
+    full_text = "\n\n".join(paragraphs)
+
+    return chunk_text(
+        full_text,
+        source=path.name,
+        page=None,
+    )
 
 
-def chunk_pdf(
-    pdf_path: str | Path,
-) -> list[dict[str, Any]]:
-    """Alias for process_pdf."""
-    return process_pdf(pdf_path)
+def process_text(path: str | Path) -> list[dict[str, Any]]:
+    """Read a plain-text file and create chunks."""
+
+    path = Path(path)
+
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
+
+    text = path.read_text(
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    return chunk_text(
+        text,
+        source=path.name,
+        page=None,
+    )
+
+
+def process_markdown(path: str | Path) -> list[dict[str, Any]]:
+    """Read a Markdown file and create chunks."""
+
+    path = Path(path)
+
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
+
+    text = path.read_text(
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    return chunk_text(
+        text,
+        source=path.name,
+        page=None,
+    )
+
+
+def process_document(path: str | Path) -> list[dict[str, Any]]:
+    """Process a supported document based on its file extension."""
+
+    path = Path(path)
+
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
+
+    extension = path.suffix.lower()
+
+    if extension not in SUPPORTED_EXTENSIONS:
+        supported = ", ".join(sorted(SUPPORTED_EXTENSIONS))
+        raise ValueError(
+            f"Unsupported file type '{extension}'. "
+            f"Supported types: {supported}"
+        )
+
+    if extension == ".pdf":
+        return process_pdf(path)
+
+    if extension == ".docx":
+        return process_docx(path)
+
+    if extension == ".txt":
+        return process_text(path)
+
+    if extension == ".md":
+        return process_markdown(path)
+
+    # This should never be reached because of the extension check.
+    raise ValueError(f"Unsupported file type: {extension}")
+
+
+# Backwards-compatible alias used by existing code.
+def chunk_pdf(path: str | Path) -> list[dict[str, Any]]:
+    """Backward-compatible alias for PDF processing."""
+    return process_pdf(path)
 
 
 __all__ = [
-    "process_pdf",
-    "process_document",
+    "DEFAULT_CHUNK_SIZE",
+    "DEFAULT_CHUNK_OVERLAP",
+    "SUPPORTED_EXTENSIONS",
+    "chunk_text",
     "chunk_pdf",
+    "process_pdf",
+    "process_docx",
+    "process_text",
+    "process_markdown",
+    "process_document",
 ]

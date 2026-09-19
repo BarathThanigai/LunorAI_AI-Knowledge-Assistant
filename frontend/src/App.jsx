@@ -3,6 +3,26 @@ import "./App.css";
 
 const API_BASE = "http://127.0.0.1:8000";
 
+const SUPPORTED_EXTENSIONS = [".pdf", ".docx", ".txt", ".md"];
+
+const getFileExtension = (filename) => {
+  const lastDot = filename.lastIndexOf(".");
+  return lastDot >= 0 ? filename.slice(lastDot).toLowerCase() : "";
+};
+
+const getFileTypeLabel = (filename) => {
+  const extension = getFileExtension(filename);
+
+  const labels = {
+    ".pdf": "PDF",
+    ".docx": "DOCX",
+    ".txt": "TXT",
+    ".md": "MD",
+  };
+
+  return labels[extension] || "DOC";
+};
+
 function App() {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -24,7 +44,7 @@ function App() {
       const data = await response.json();
       setDocuments(data.documents || []);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to load documents.");
     }
   };
 
@@ -54,13 +74,15 @@ function App() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || "Failed to generate answer.");
+        throw new Error(
+          data.detail || "Failed to generate answer."
+        );
       }
 
       setAnswer(data.answer || "");
       setSources(data.sources || []);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to generate answer.");
     } finally {
       setLoading(false);
     }
@@ -78,14 +100,20 @@ function App() {
 
     if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      setError("Only PDF files are supported.");
+    const extension = getFileExtension(file.name);
+
+    if (!SUPPORTED_EXTENSIONS.includes(extension)) {
+      setError(
+        "Unsupported file type. Please upload a PDF, DOCX, TXT, or Markdown file."
+      );
       event.target.value = "";
       return;
     }
 
     setUploading(true);
     setError("");
+    setAnswer("");
+    setSources([]);
 
     const formData = new FormData();
     formData.append("file", file);
@@ -108,11 +136,8 @@ function App() {
       }
 
       await fetchDocuments();
-
-      setAnswer("");
-      setSources([]);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Document upload failed.");
     } finally {
       setUploading(false);
       event.target.value = "";
@@ -143,7 +168,7 @@ function App() {
       setAnswer("");
       setSources([]);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to delete document.");
     }
   };
 
@@ -176,8 +201,8 @@ function App() {
           </h2>
 
           <p className="hero-description">
-            Upload your PDFs and ask questions using a retrieval-
-            augmented AI assistant.
+            Upload your documents and ask questions using a
+            retrieval-augmented AI assistant.
           </p>
         </section>
 
@@ -258,20 +283,27 @@ function App() {
                     >
                       <div className="source-top">
                         <div className="pdf-icon">
-                          PDF
+                          {getFileTypeLabel(source.document)}
                         </div>
 
                         <span className="source-number">
-                          0{index + 1}
+                          {String(index + 1).padStart(2, "0")}
                         </span>
                       </div>
 
                       <h4>{source.document}</h4>
 
                       <div className="source-meta">
-                        <span>
-                          Page {source.page}
-                        </span>
+                        {source.page !== null &&
+                        source.page !== undefined ? (
+                          <span>
+                            Page {source.page}
+                          </span>
+                        ) : (
+                          <span>
+                            Document
+                          </span>
+                        )}
 
                         <span>
                           Score{" "}
@@ -307,14 +339,15 @@ function App() {
           <div
             className="upload-zone"
             onClick={() =>
-              fileInputRef.current?.click()
+              !uploading && fileInputRef.current?.click()
             }
           >
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,application/pdf"
+              accept=".pdf,.docx,.txt,.md"
               onChange={uploadDocument}
+              disabled={uploading}
               hidden
             />
 
@@ -326,13 +359,13 @@ function App() {
               <strong>
                 {uploading
                   ? "Processing document..."
-                  : "Upload a PDF"}
+                  : "Upload a Document"}
               </strong>
 
               <p>
                 {uploading
                   ? "Extracting text and building embeddings"
-                  : "Drop a PDF here or click to browse"}
+                  : "PDF, DOCX, TXT, and Markdown supported"}
               </p>
             </div>
           </div>
@@ -346,7 +379,7 @@ function App() {
                 >
                   <div className="document-info">
                     <div className="document-icon">
-                      PDF
+                      {getFileTypeLabel(document.filename)}
                     </div>
 
                     <div>

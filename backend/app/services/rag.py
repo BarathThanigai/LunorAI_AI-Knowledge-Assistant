@@ -8,8 +8,19 @@ from app.services.llm import generate_answer
 from app.services.retriever import Retriever
 
 
+FALLBACK_ANSWER = (
+    "I couldn't find that information in the knowledge base."
+)
+
+# Retrieve a few extra candidates, then only send the strongest
+# relevant chunks to the LLM.
+RETRIEVAL_TOP_K = 8
+MAX_CONTEXT_CHUNKS = 5
+MIN_SIMILARITY = 0.20
+
+
 class RAGService:
-    """Combine retrieval and LLM generation into a RAG pipeline."""
+    """Retrieve relevant knowledge and generate grounded answers."""
 
     def __init__(
         self,
@@ -17,12 +28,51 @@ class RAGService:
     ) -> None:
         self.retriever = retriever or Retriever()
 
+    def _build_context(
+        self,
+        results: list[dict[str, Any]],
+    ) -> tuple[str, list[dict[str, Any]]]:
+        """Build grounded LLM context from sufficiently relevant chunks."""
+
+        relevant_results = [
+            result
+            for result in results
+            if float(result["score"]) >= MIN_SIMILARITY
+        ]
+
+        relevant_results = relevant_results[:MAX_CONTEXT_CHUNKS]
+
+        context_parts: list[str] = []
+
+        for index, result in enumerate(relevant_results, start=1):
+            page = result.get("page")
+
+            page_text = (
+                str(page)
+                if page is not None
+                else "N/A"
+            )
+
+            context_parts.append(
+                f"""Source {index}
+Document: {result["source"]}
+Page: {page_text}
+Similarity: {float(result["score"]):.3f}
+
+{result["text"]}"""
+            )
+
+        return (
+            "\n\n---\n\n".join(context_parts),
+            relevant_results,
+        )
+
     def answer(
         self,
         question: str,
-        top_k: int = 5,
+        top_k: int = RETRIEVAL_TOP_K,
     ) -> dict[str, Any]:
-        """Retrieve relevant chunks and generate a grounded answer."""
+        """Answer a question using only retrieved knowledge."""
 
         if not isinstance(question, str) or not question.strip():
             raise ValueError(
@@ -39,45 +89,28 @@ class RAGService:
             top_k=top_k,
         )
 
-        if not results:
+        context, relevant_results = self._build_context(results)
+
+        sources = [
+            {
+                "document": result["source"],
+                "page": result.get("page"),
+                "score": round(float(result["score"]), 3),
+            }
+            for result in relevant_results
+        ]
+
+        # Nothing sufficiently relevant was retrieved.
+        if not relevant_results:
             return {
-                "answer": (
-                    "I couldn't find that information "
-                    "in the knowledge base."
-                ),
+                "answer": FALLBACK_ANSWER,
                 "sources": [],
             }
-
-        context_parts: list[str] = []
-
-        for index, result in enumerate(results, start=1):
-            context_parts.append(
-                f"""Source {index}
-Document: {result["source"]}
-Page: {result["page"]}
-Similarity: {result["score"]:.3f}
-
-{result["text"]}"""
-            )
-
-        context = "\n\n---\n\n".join(context_parts)
 
         answer = generate_answer(
             question=question,
             context=context,
         )
-
-        sources = [
-            {
-                "document": result["source"],
-                "page": result["page"],
-                "score": round(
-                    float(result["score"]),
-                    3,
-                ),
-            }
-            for result in results
-        ]
 
         return {
             "answer": answer,
@@ -87,9 +120,9 @@ Similarity: {result["score"]:.3f}
 
 def answer_question(
     question: str,
-    top_k: int = 5,
+    top_k: int = RETRIEVAL_TOP_K,
 ) -> dict[str, Any]:
-    """Convenience function for answering a question with RAG."""
+    """Convenience function for answering a question."""
 
     service = RAGService()
 
@@ -102,4 +135,5 @@ def answer_question(
 __all__ = [
     "RAGService",
     "answer_question",
+    "FALLBACK_ANSWER",
 ]

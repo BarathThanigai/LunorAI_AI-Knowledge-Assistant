@@ -1,0 +1,1 @@
+﻿Concurrent Web Crawler uses React, FastAPI, Python, asyncio, aiohttp, BeautifulSoup, SQLite, Docker, and GitHub Actions.

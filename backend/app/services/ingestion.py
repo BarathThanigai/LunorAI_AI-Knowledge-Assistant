@@ -5,12 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from app.services.document_processor import process_pdf
+from app.services.document_processor import (
+    SUPPORTED_EXTENSIONS,
+    process_document,
+)
 from app.services.vector_store import VectorStore
 
 
 class IngestionService:
-    """Process PDF documents and add their chunks to the vector store."""
+    """Process supported documents and add their chunks to the vector store."""
 
     def __init__(
         self,
@@ -18,44 +21,34 @@ class IngestionService:
     ) -> None:
         self.vector_store = vector_store or VectorStore()
 
-    def ingest_pdf(
+    def ingest_document(
         self,
-        pdf_path: str | Path,
+        document_path: str | Path,
         source_name: str | None = None,
     ) -> dict[str, Any]:
-        """Process a PDF and add its chunks to the vector store."""
+        """Process a supported document and add its chunks to the vector store."""
 
-        path = Path(pdf_path)
+        path = Path(document_path)
 
         if not path.exists():
-            raise FileNotFoundError(
-                f"PDF file not found: {path}"
-            )
+            raise FileNotFoundError(f"Document not found: {path}")
 
         if not path.is_file():
+            raise ValueError(f"Path is not a file: {path}")
+
+        if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+            supported = ", ".join(sorted(SUPPORTED_EXTENSIONS))
             raise ValueError(
-                f"Path is not a file: {path}"
+                f"Unsupported file type '{path.suffix}'. "
+                f"Supported types: {supported}"
             )
 
-        if path.suffix.lower() != ".pdf":
-            raise ValueError(
-                "Only PDF files are supported."
-            )
-
-        chunks = process_pdf(path)
+        chunks = process_document(path)
 
         if not chunks:
-            raise ValueError(
-                "No text could be extracted from the PDF."
-            )
+            raise ValueError("No text could be extracted from the document.")
 
-        # Store the human-readable/original filename in metadata
-        # instead of the UUID-prefixed physical filename.
-        metadata_source = (
-            source_name
-            if source_name
-            else path.name
-        )
+        metadata_source = source_name if source_name else path.name
 
         for chunk in chunks:
             chunk["source"] = metadata_source
@@ -64,26 +57,41 @@ class IngestionService:
 
         return {
             "source": metadata_source,
+            "file_type": path.suffix.lower(),
             "chunks_added": len(chunks),
             "total_chunks": self.vector_store.count,
         }
 
 
+def ingest_document(
+    document_path: str | Path,
+    source_name: str | None = None,
+) -> dict[str, Any]:
+    """Convenience function for ingesting a supported document."""
+
+    service = IngestionService()
+
+    return service.ingest_document(
+        document_path=document_path,
+        source_name=source_name,
+    )
+
+
+# Backwards-compatible PDF helper.
 def ingest_pdf(
     pdf_path: str | Path,
     source_name: str | None = None,
 ) -> dict[str, Any]:
-    """Convenience function for ingesting a PDF."""
+    """Backward-compatible helper for PDF ingestion."""
 
-    service = IngestionService()
-
-    return service.ingest_pdf(
-        pdf_path=pdf_path,
+    return ingest_document(
+        document_path=pdf_path,
         source_name=source_name,
     )
 
 
 __all__ = [
     "IngestionService",
+    "ingest_document",
     "ingest_pdf",
 ]
