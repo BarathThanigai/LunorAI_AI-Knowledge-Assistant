@@ -1,63 +1,143 @@
-"""Sentence-transformer embeddings for the LunorAI RAG pipeline."""
+"""NVIDIA API embeddings for the LunorAI RAG pipeline."""
 
 from __future__ import annotations
 
-from threading import Lock
+import os
+from functools import lru_cache
 
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from dotenv import load_dotenv
+from openai import OpenAI
 
-MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+load_dotenv()
 
-_embedding_model: SentenceTransformer | None = None
-_model_lock = Lock()
+MODEL_NAME = "nvidia/nemotron-3-embed-1b"
 
 
-def get_embedding_model() -> SentenceTransformer:
-    """Return a shared SentenceTransformer model instance."""
-    global _embedding_model
+@lru_cache(maxsize=1)
+def get_embedding_model() -> str:
+    """Return the configured NVIDIA embedding model name."""
+    return MODEL_NAME
 
-    if _embedding_model is None:
-        with _model_lock:
-            if _embedding_model is None:
-                _embedding_model = SentenceTransformer(MODEL_NAME)
-    return _embedding_model
+
+@lru_cache(maxsize=1)
+def get_embedding_client() -> OpenAI:
+    """Return a shared NVIDIA API client."""
+    api_key = os.getenv("NVIDIA_API_KEY")
+    base_url = os.getenv(
+        "NVIDIA_BASE_URL",
+        "https://integrate.api.nvidia.com/v1",
+    )
+
+    if not api_key:
+        raise RuntimeError("NVIDIA_API_KEY is not configured.")
+
+    return OpenAI(
+        base_url=base_url,
+        api_key=api_key,
+    )
+
+
+def _embed(
+    texts: list[str],
+    input_type: str,
+) -> np.ndarray:
+    """Generate normalized embeddings using NVIDIA's embedding API."""
+    if not texts:
+        return np.empty(
+            (0, 2048),
+            dtype=np.float32,
+        )
+
+    if input_type not in {"query", "passage"}:
+        raise ValueError(
+            "input_type must be either 'query' or 'passage'."
+        )
+
+    client = get_embedding_client()
+
+    response = client.embeddings.create(
+        model=MODEL_NAME,
+        input=texts,
+        extra_body={
+            "input_type": input_type,
+            "truncate": "END",
+        },
+    )
+
+    embeddings = [
+        item.embedding
+        for item in response.data
+    ]
+
+    array = np.asarray(
+        embeddings,
+        dtype=np.float32,
+    )
+
+    if array.ndim == 1:
+        array = array.reshape(1, -1)
+
+    # Normalize so FAISS IndexFlatIP behaves as cosine similarity.
+    norms = np.linalg.norm(
+        array,
+        axis=1,
+        keepdims=True,
+    )
+
+    norms[norms == 0] = 1.0
+
+    array = array / norms
+
+    return array.astype(
+        np.float32,
+        copy=False,
+    )
 
 
 def embed_texts(texts: list[str]) -> np.ndarray:
-    """Return normalized sentence embeddings for a list of texts as float32."""
-    model = get_embedding_model()
+    """Return normalized passage embeddings for document chunks."""
+    if not isinstance(texts, list):
+        raise TypeError("texts must be a list of strings.")
 
-    if not texts:
-        dim = int(model.get_sentence_embedding_dimension())
-        return np.empty((0, dim), dtype=np.float32)
+    if any(
+        not isinstance(text, str)
+        for text in texts
+    ):
+        raise TypeError(
+            "Every item in texts must be a string."
+        )
 
-    embeddings = model.encode(
+    return _embed(
         texts,
-        batch_size=32,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
+        input_type="passage",
     )
-    array = np.asarray(embeddings, dtype=np.float32)
-    if array.ndim == 1:
-        array = array.reshape(1, -1)
-    return array.astype(np.float32, copy=False)
 
 
 def embed_query(text: str) -> np.ndarray:
-    """Return a single normalized query embedding as a 1D float32 vector."""
+    """Return a normalized embedding for a user query."""
     if not isinstance(text, str) or not text.strip():
-        raise ValueError("text must be a non-empty string.")
+        raise ValueError(
+            "text must be a non-empty string."
+        )
 
-    model = get_embedding_model()
-    embedding = model.encode(
+    embedding = _embed(
         [text],
-        batch_size=1,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
+        input_type="query",
     )
-    array = np.asarray(embedding, dtype=np.float32)
-    return array.reshape(-1).astype(np.float32, copy=False)
+
+    return embedding[0]
 
 
-__all__ = ["get_embedding_model", "embed_texts", "embed_query"]
+def get_embedding_dimension() -> int:
+    """Return the embedding dimension used by the NVIDIA model."""
+    return 2048
+
+
+__all__ = [
+    "get_embedding_model",
+    "get_embedding_client",
+    "get_embedding_dimension",
+    "embed_texts",
+    "embed_query",
+]

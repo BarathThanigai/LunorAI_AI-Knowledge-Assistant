@@ -9,7 +9,10 @@ from typing import Any
 import faiss
 import numpy as np
 
-from app.services.embeddings import embed_texts, get_embedding_model
+from app.services.embeddings import (
+    embed_texts,
+    get_embedding_dimension,
+)
 
 
 class VectorStore:
@@ -31,9 +34,7 @@ class VectorStore:
 
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
-        self._dimension = int(
-            get_embedding_model().get_embedding_dimension()
-        )
+        self._dimension = get_embedding_dimension()
 
         self._index: faiss.IndexFlatIP | None = None
         self._metadata: list[dict[str, Any]] = []
